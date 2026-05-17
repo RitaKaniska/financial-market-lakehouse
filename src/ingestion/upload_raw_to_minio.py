@@ -31,6 +31,15 @@ class DiscoveredFile:
     object_key: str
 
 
+@dataclass(frozen=True)
+class UploadResult:
+    source_path: Path
+    symbol: str
+    object_key: str
+    status: str
+    message: str = ""
+
+
 def load_env_file(env_path: Path = Path(".env")) -> None:
     if not env_path.exists():
         return
@@ -114,6 +123,14 @@ def prepare_ingestion_plan(
     return plan
 
 
+def validate_source_file(file_path: Path) -> None:
+    if not file_path.exists():
+        raise FileNotFoundError(f"Source file does not exist: {file_path}")
+
+    if file_path.stat().st_size == 0:
+        raise ValueError(f"Source file is empty: {file_path}")
+
+
 def get_minio_client(config: IngestionConfig) -> Minio:
     return Minio(
         endpoint=config.minio_endpoint,
@@ -133,6 +150,7 @@ def ensure_bucket_exists(client: Minio, bucket_name: str) -> None:
 
 
 def upload_file_to_minio(client: Minio, bucket_name: str, item: DiscoveredFile) -> None:
+    validate_source_file(item.source_path)
     client.fput_object(
         bucket_name=bucket_name,
         object_name=item.object_key,
@@ -146,6 +164,60 @@ def upload_file_to_minio(client: Minio, bucket_name: str, item: DiscoveredFile) 
         item.source_path,
         item.object_key,
     )
+
+
+def process_ingestion_plan(
+    client: Minio, bucket_name: str, ingestion_plan: Iterable[DiscoveredFile]
+) -> list[UploadResult]:
+    results: list[UploadResult] = []
+
+    for item in ingestion_plan:
+        try:
+            upload_file_to_minio(client, bucket_name, item)
+            results.append(
+                UploadResult(
+                    source_path=item.source_path,
+                    symbol=item.symbol,
+                    object_key=item.object_key,
+                    status="success",
+                )
+            )
+        except Exception as exc:
+            LOGGER.error(
+                "Failed to upload file | symbol=%s source=%s target=%s error=%s",
+                item.symbol,
+                item.source_path,
+                item.object_key,
+                exc,
+            )
+            results.append(
+                UploadResult(
+                    source_path=item.source_path,
+                    symbol=item.symbol,
+                    object_key=item.object_key,
+                    status="failed",
+                    message=str(exc),
+                )
+            )
+
+    return results
+
+
+def log_summary(results: Iterable[UploadResult]) -> None:
+    result_list = list(results)
+    total_files = len(result_list)
+    success_count = sum(1 for item in result_list if item.status == "success")
+    failed_count = total_files - success_count
+
+    LOGGER.info(
+        "Raw ingestion summary | total_files=%s success_count=%s failed_count=%s",
+        total_files,
+        success_count,
+        failed_count,
+    )
+
+    if failed_count:
+        LOGGER.warning("Failed uploads detected during raw ingestion")
 
 
 def main() -> None:
@@ -165,15 +237,18 @@ def main() -> None:
     ensure_bucket_exists(client, config.bucket_name)
 
     LOGGER.info("Discovered %s CSV files for raw ingestion", len(ingestion_plan))
-    for item in ingestion_plan:
-        upload_file_to_minio(client, config.bucket_name, item)
-    LOGGER.info("Completed upload of %s files to bucket %s", len(ingestion_plan), config.bucket_name)
+    results = process_ingestion_plan(client, config.bucket_name, ingestion_plan)
+    log_summary(results)
+
+    failed_count = sum(1 for item in results if item.status == "failed")
+    if failed_count:
+        raise RuntimeError(f"Raw ingestion completed with {failed_count} failed uploads")
 
 
 def run() -> int:
     try:
         main()
-    except (FileNotFoundError, ValueError, S3Error) as exc:
+    except Exception as exc:
         LOGGER.exception("Raw ingestion failed: %s", exc)
         return 1
     return 0

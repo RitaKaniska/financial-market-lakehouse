@@ -78,7 +78,7 @@ The raw zone stores source data with minimal modification. Its purpose is to pre
 
 Expected path pattern:
 
-- `s3://raw-zone/<symbol>/...`
+- `s3://raw-zone/market_data/symbol=<SYMBOL>/<FILE>.csv`
 
 Typical characteristics:
 
@@ -88,7 +88,7 @@ Typical characteristics:
 
 ### Curated Zone
 
-The curated zone stores cleaned and analytics-ready datasets in columnar format.
+The curated zone stores cleaned and analytics-ready datasets in columnar format. This zone does not come from the source dataset directly. It is created by the Spark transformation layer after cleansing, metric computation, and modeling.
 
 Expected path pattern:
 
@@ -110,19 +110,22 @@ The serving model will follow a simple star schema.
 
 `fact_trades`
 
-Candidate columns:
+Current planned columns:
 
-- `trade_timestamp`
+- `event_timestamp`
+- `close_timestamp`
 - `date`
 - `symbol`
-- `open`
-- `high`
-- `low`
-- `close`
+- `open_price`
+- `high_price`
+- `low_price`
+- `close_price`
 - `volume`
 - `quote_asset_volume`
 - `number_of_trades`
-- derived metrics such as `vwap` and moving averages
+- `taker_buy_base_asset_volume`
+- `taker_buy_quote_asset_volume`
+- derived metrics such as `vwap` and `moving_avg_5`
 
 ### Dimension Tables
 
@@ -151,20 +154,30 @@ This model supports common analytical questions around price movement, trade vol
 The Spark layer is expected to implement at least three non-trivial jobs:
 
 1. Cleansing job
+
 - parse timestamps
 - cast numeric columns
 - remove null or invalid rows
 - filter out negative prices or volumes
+- remove duplicate market events per `symbol` and `event_timestamp`
 
 2. Windowed aggregation job
+
 - compute VWAP
 - compute moving averages over time windows
 - prepare trend-oriented metrics for downstream use
 
 3. Join and modeling job
-- enrich fact data with `dim_symbol`
-- generate time-based dimensional attributes
+
+- derive `dim_symbol`
+- generate time-based dimensional attributes in `dim_time`
 - write curated Parquet outputs partitioned by `date`
+
+Current implementation status:
+
+- raw ingestion into MinIO `raw-zone` is implemented
+- Spark transformation logic has been drafted for cleansing, VWAP, moving average, and curated outputs
+- local unit tests have been added for transform functions
 
 ## 8. Orchestration Plan
 
@@ -230,4 +243,3 @@ Expected mitigation:
 - connect the flow with an Airflow DAG
 - add data quality checks
 - build the serving layer with DuckDB and Streamlit
-

@@ -69,3 +69,7 @@ The current Spark transformation logic is designed to:
 The pipeline has been registered in Airflow and can be triggered manually from the Airflow UI during development.
 
 ![Airflow DAG UI](./First_DAG_onUI.png)
+
+Example successful task execution from the Airflow UI:
+
+![Airflow Task Success](./First_Task_Success.png)

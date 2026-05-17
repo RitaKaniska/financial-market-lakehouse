@@ -195,12 +195,16 @@ Key orchestration goals:
 Current orchestration progress:
 
 - the initial Airflow DAG has been created and detected successfully in the Airflow UI
-- the current morning scope includes `ingest_raw_data >> transform_market_data`
-- the data quality task will be added as the next orchestration step
+- the current pipeline flow includes `ingest_raw_data >> transform_market_data >> run_data_quality_checks`
+- retry and failure-aware behavior has been added for safer reruns
 
 Airflow UI preview:
 
 ![Airflow DAG Registration](./Test_create_DAG.png)
+
+Example task execution preview:
+
+![Airflow Task Success](./First_Task_Success.png)
 
 ## 9. Why This Tech Stack
 

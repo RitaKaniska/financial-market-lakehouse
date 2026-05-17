@@ -63,3 +63,13 @@ The current Spark transformation logic is designed to:
 - compute `vwap`
 - compute `moving_avg_5`
 - write a fact table and lightweight dimension tables to the curated zone
+
+## Airflow Orchestration Preview
+
+The pipeline has been registered in Airflow and can be triggered manually from the Airflow UI during development.
+
+![Airflow DAG UI](./First_DAG_onUI.png)
+
+Example successful task execution from the Airflow UI:
+
+![Airflow Task Success](./First_Task_Success.png)

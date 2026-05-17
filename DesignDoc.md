@@ -192,6 +192,20 @@ Key orchestration goals:
 - idempotent reruns for historical dates
 - clear separation between ingestion and transformation steps
 
+Current orchestration progress:
+
+- the initial Airflow DAG has been created and detected successfully in the Airflow UI
+- the current pipeline flow includes `ingest_raw_data >> transform_market_data >> run_data_quality_checks`
+- retry and failure-aware behavior has been added for safer reruns
+
+Airflow UI preview:
+
+![Airflow DAG Registration](./Test_create_DAG.png)
+
+Example task execution preview:
+
+![Airflow Task Success](./First_Task_Success.png)
+
 ## 9. Why This Tech Stack
 
 ### Airflow

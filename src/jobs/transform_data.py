@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import logging
+import os
 from pathlib import Path
 
 from pyspark.sql import DataFrame
@@ -8,6 +10,9 @@ from pyspark.sql import Window
 from pyspark.sql.types import DoubleType, LongType, StringType, StructField, StructType
 
 from src.utils.spark_helper import get_spark_session, load_env_file
+
+
+LOGGER = logging.getLogger("market_transform")
 
 
 RAW_MARKET_SCHEMA = StructType(
@@ -26,6 +31,13 @@ RAW_MARKET_SCHEMA = StructType(
         StructField("ignore", StringType(), True),
     ]
 )
+
+
+def configure_logging() -> None:
+    logging.basicConfig(
+        level=logging.INFO,
+        format="%(asctime)s | %(levelname)s | %(message)s",
+    )
 
 
 def cleanse_market_data(df: DataFrame) -> DataFrame:
@@ -178,15 +190,26 @@ def write_curated_outputs(
 
 
 def run_job(
-    raw_path: str = "s3a://raw-zone/market_data",
-    curated_root: str = "s3a://curated-zone",
+    raw_path: str | None = None,
+    curated_root: str | None = None,
 ) -> None:
+    configure_logging()
     load_env_file(Path(".env"))
+    resolved_raw_path = raw_path or os.getenv("RAW_MARKET_PATH", "s3a://raw-zone/market_data")
+    resolved_curated_root = curated_root or os.getenv("CURATED_ROOT_PATH", "s3a://curated-zone")
+
+    LOGGER.info("Starting Spark transformation job")
+    LOGGER.info("Resolved raw path: %s", resolved_raw_path)
+    LOGGER.info("Resolved curated root: %s", resolved_curated_root)
+
     spark = get_spark_session("financial-market-curation")
 
-    raw_df = read_raw_market_data(spark, raw_path)
+    raw_df = read_raw_market_data(spark, resolved_raw_path)
     if "symbol" not in raw_df.columns:
         raw_df = raw_df.withColumn("symbol", F.lit(None).cast(StringType()))
+
+    raw_count = raw_df.count()
+    LOGGER.info("Loaded raw rows: %s", raw_count)
 
     cleansed_df = cleanse_market_data(raw_df)
     enriched_df = add_window_metrics(cleansed_df)
@@ -195,7 +218,24 @@ def run_job(
     dim_symbol_df = build_dim_symbol(enriched_df)
     dim_time_df = build_dim_time(enriched_df)
 
-    write_curated_outputs(fact_trades_df, dim_symbol_df, dim_time_df, curated_root)
+    fact_count = fact_trades_df.count()
+    dim_symbol_count = dim_symbol_df.count()
+    dim_time_count = dim_time_df.count()
+
+    LOGGER.info(
+        "Transformation summary | fact_trades=%s dim_symbol=%s dim_time=%s",
+        fact_count,
+        dim_symbol_count,
+        dim_time_count,
+    )
+
+    write_curated_outputs(
+        fact_trades_df,
+        dim_symbol_df,
+        dim_time_df,
+        resolved_curated_root,
+    )
+    LOGGER.info("Curated outputs written successfully")
     spark.stop()
 
 

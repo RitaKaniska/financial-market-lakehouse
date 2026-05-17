@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import logging
+import os
 from pathlib import Path
 
 from pyspark.sql import DataFrame
@@ -65,12 +66,27 @@ def check_symbol_referential_integrity(fact_trades_df: DataFrame, dim_symbol_df:
     LOGGER.info("DQ passed | dim_symbol covers all fact_trades symbols")
 
 
+def check_unique_symbol_timestamp_pairs(fact_trades_df: DataFrame) -> None:
+    duplicate_count = (
+        fact_trades_df.groupBy("symbol", "event_timestamp")
+        .count()
+        .filter(F.col("count") > 1)
+        .count()
+    )
+    if duplicate_count > 0:
+        raise ValueError(
+            f"fact_trades contains {duplicate_count} duplicate symbol/event_timestamp pairs"
+        )
+    LOGGER.info("DQ passed | symbol and event_timestamp pairs are unique")
+
+
 def run_checks(fact_trades_df: DataFrame, dim_symbol_df: DataFrame) -> None:
     checks = [
         lambda: check_fact_trades_has_rows(fact_trades_df),
         lambda: check_symbol_not_null(fact_trades_df),
         lambda: check_close_price_positive(fact_trades_df),
         lambda: check_event_timestamp_not_null(fact_trades_df),
+        lambda: check_unique_symbol_timestamp_pairs(fact_trades_df),
         lambda: check_symbol_referential_integrity(fact_trades_df, dim_symbol_df),
     ]
 
@@ -87,13 +103,19 @@ def run_checks(fact_trades_df: DataFrame, dim_symbol_df: DataFrame) -> None:
     )
 
 
-def run(curated_root: str = "s3a://curated-zone") -> int:
+def run(curated_root: str | None = None) -> int:
     configure_logging()
     load_env_file(Path(".env"))
+    resolved_curated_root = curated_root or os.getenv("CURATED_ROOT_PATH", "s3a://curated-zone")
+    LOGGER.info("Starting curated data quality checks")
+    LOGGER.info("Resolved curated root: %s", resolved_curated_root)
     spark = get_spark_session("financial-market-dq")
 
     try:
-        fact_trades_df, dim_symbol_df = read_curated_data(spark, curated_root=curated_root)
+        fact_trades_df, dim_symbol_df = read_curated_data(
+            spark,
+            curated_root=resolved_curated_root,
+        )
         run_checks(fact_trades_df, dim_symbol_df)
         LOGGER.info("Curated data quality checks completed successfully")
         return 0

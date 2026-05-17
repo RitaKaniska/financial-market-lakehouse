@@ -2,3 +2,5 @@ pandas
 minio
 pyspark
 pytest
+duckdb
+streamlit

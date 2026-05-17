@@ -1,2 +1,4 @@
 pandas
 minio
+pyspark
+pytest

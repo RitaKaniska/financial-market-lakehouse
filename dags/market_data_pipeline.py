@@ -31,4 +31,9 @@ with DAG(
         bash_command="cd /opt/airflow && python src/jobs/transform_data.py",
     )
 
-    ingest_raw_data >> transform_market_data
+    run_data_quality_checks = BashOperator(
+        task_id="run_data_quality_checks",
+        bash_command="cd /opt/airflow && python src/quality/check_curated_data.py",
+    )
+
+    ingest_raw_data >> transform_market_data >> run_data_quality_checks

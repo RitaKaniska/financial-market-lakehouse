@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import os
-import sys
 from datetime import date, timedelta
 from pathlib import Path
 
@@ -9,6 +8,7 @@ import duckdb
 import streamlit as st
 
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
+import sys
 if str(PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(PROJECT_ROOT))
 
@@ -39,7 +39,7 @@ def get_duckdb_connection() -> duckdb.DuckDBPyConnection:
     connection.execute(
         f"SET s3_endpoint='{os.getenv('MINIO_ENDPOINT', 'localhost:9000').replace('http://', '').replace('https://', '')}';"
     )
-    connection.execute(f"SET s3_access_key_id='{os.getenv('MINIO_ROOT_USER', 'minio_admin')}';")
+    connection.execute(f"SET s3_access_key_id='{os.getenv('MINIO_ROOT_USER', 'minio_admin')}';") 
     connection.execute(
         f"SET s3_secret_access_key='{os.getenv('MINIO_ROOT_PASSWORD', 'minio_password_secure')}';"
     )

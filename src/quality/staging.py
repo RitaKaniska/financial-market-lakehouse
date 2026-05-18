@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import logging
-import os
 
 from pyspark.sql import DataFrame, SparkSession
 
@@ -10,10 +9,12 @@ LOGGER = logging.getLogger("curated_staging")
 
 
 def get_staging_root(staging_root: str | None = None) -> str:
+    import os
     return staging_root or os.getenv("CURATED_STAGING_ROOT", "s3a://curated-zone/staging")
 
 
 def get_curated_root(curated_root: str | None = None) -> str:
+    import os
     return curated_root or os.getenv("CURATED_ROOT_PATH", "s3a://curated-zone")
 
 

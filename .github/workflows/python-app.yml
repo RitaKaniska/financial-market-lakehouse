@@ -42,7 +42,6 @@ jobs:
           
           # Đăng ký thư mục hiện tại thành package để tránh lỗi import
           # Đảm bảo bạn có file setup.py hoặc pyproject.toml ở gốc
-          pip install -e . 
 
       - name: Run Ruff (check)
         # Chạy check trước, nếu sai thì fail luôn để dev sửa ở local

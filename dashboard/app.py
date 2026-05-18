@@ -7,10 +7,6 @@ from pathlib import Path
 import duckdb
 import streamlit as st
 
-PROJECT_ROOT = Path(__file__).resolve().parents[1]
-import sys
-if str(PROJECT_ROOT) not in sys.path:
-    sys.path.insert(0, str(PROJECT_ROOT))
 
 from dashboard.charts import (
     build_candlestick_chart,

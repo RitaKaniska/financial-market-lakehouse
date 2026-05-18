@@ -27,6 +27,7 @@ services:
   airflow-init:
     image: ${AIRFLOW_IMAGE_NAME}
     environment:
+      PYTHONPATH: /opt/airflow
       AIRFLOW__DATABASE__SQL_ALCHEMY_CONN: postgresql+psycopg2://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres/${POSTGRES_DB}
       AIRFLOW__CORE__EXECUTOR: LocalExecutor
       AIRFLOW__CORE__LOAD_EXAMPLES: "false"
@@ -60,7 +61,14 @@ services:
     depends_on:
       airflow-init:
         condition: service_completed_successfully
+    env_file:
+      - .env
     environment:
+      PYTHONPATH: /opt/airflow
+      MINIO_ENDPOINT: http://minio:9000
+      RAW_MARKET_PATH: s3a://raw-zone/market_data
+      CURATED_STAGING_ROOT: s3a://curated-zone/staging
+      CURATED_ROOT_PATH: s3a://curated-zone
       AIRFLOW__DATABASE__SQL_ALCHEMY_CONN: postgresql+psycopg2://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres/${POSTGRES_DB}
       AIRFLOW__CORE__EXECUTOR: LocalExecutor
       AIRFLOW__CORE__LOAD_EXAMPLES: "false"
@@ -81,7 +89,14 @@ services:
     depends_on:
       airflow-init:
         condition: service_completed_successfully
+    env_file:
+      - .env
     environment:
+      PYTHONPATH: /opt/airflow
+      MINIO_ENDPOINT: http://minio:9000
+      RAW_MARKET_PATH: s3a://raw-zone/market_data
+      CURATED_STAGING_ROOT: s3a://curated-zone/staging
+      CURATED_ROOT_PATH: s3a://curated-zone
       AIRFLOW__DATABASE__SQL_ALCHEMY_CONN: postgresql+psycopg2://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres/${POSTGRES_DB}
       AIRFLOW__CORE__EXECUTOR: LocalExecutor
       AIRFLOW__CORE__LOAD_EXAMPLES: "false"
@@ -151,5 +166,24 @@ services:
       - ./data:/opt/spark/data
     depends_on:
       - spark-master
+    networks:
+      - data-pipeline-net
+
+  streamlit:
+    build:
+      context: .
+      dockerfile: dashboard/Dockerfile
+    restart: unless-stopped
+    ports:
+      - "8501:8501"
+    environment:
+      PYTHONPATH: /app
+      MINIO_ENDPOINT: http://minio:9000
+      MINIO_ROOT_USER: ${MINIO_ROOT_USER}
+      MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD}
+      CURATED_FACT_TRADES_PATH: s3://curated-zone/fact_trades/*/*.parquet
+    depends_on:
+      minio:
+        condition: service_healthy
     networks:
       - data-pipeline-net

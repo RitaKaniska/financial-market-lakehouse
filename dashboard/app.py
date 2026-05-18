@@ -1,24 +1,18 @@
 from __future__ import annotations
 
 import os
+import sys
 from pathlib import Path
 
 import duckdb
 import pandas as pd
 import streamlit as st
 
+PROJECT_ROOT = Path(__file__).resolve().parents[1]
+if str(PROJECT_ROOT) not in sys.path:
+    sys.path.insert(0, str(PROJECT_ROOT))
 
-def load_env_file(env_path: Path = Path(".env")) -> None:
-    if not env_path.exists():
-        return
-
-    for raw_line in env_path.read_text(encoding="utf-8").splitlines():
-        line = raw_line.strip()
-        if not line or line.startswith("#") or "=" not in line:
-            continue
-
-        key, value = line.split("=", 1)
-        os.environ.setdefault(key.strip(), value.strip())
+from src.utils.env import load_env_file
 
 
 @st.cache_resource
@@ -29,9 +23,13 @@ def get_duckdb_connection() -> duckdb.DuckDBPyConnection:
     connection.execute("LOAD httpfs;")
     connection.execute("SET s3_url_style='path';")
     connection.execute("SET s3_use_ssl=false;")
-    connection.execute(f"SET s3_endpoint='{os.getenv('MINIO_ENDPOINT', 'localhost:9000').replace('http://', '').replace('https://', '')}';")
+    connection.execute(
+        f"SET s3_endpoint='{os.getenv('MINIO_ENDPOINT', 'localhost:9000').replace('http://', '').replace('https://', '')}';"
+    )
     connection.execute(f"SET s3_access_key_id='{os.getenv('MINIO_ROOT_USER', 'minio_admin')}';")
-    connection.execute(f"SET s3_secret_access_key='{os.getenv('MINIO_ROOT_PASSWORD', 'minio_password_secure')}';")
+    connection.execute(
+        f"SET s3_secret_access_key='{os.getenv('MINIO_ROOT_PASSWORD', 'minio_password_secure')}';"
+    )
     return connection
 
 
@@ -100,6 +98,10 @@ def main() -> None:
     except Exception as exc:
         st.error("Unable to load curated data from DuckDB.")
         st.exception(exc)
+        st.info(
+            "Run the Airflow DAG (`ingest_raw_data` -> `transform_market_data` -> "
+            "`run_data_quality_checks`) before opening this dashboard."
+        )
         return
 
     metric_col_1, metric_col_2 = st.columns(2)

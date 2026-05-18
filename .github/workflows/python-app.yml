@@ -40,7 +40,11 @@ jobs:
 
           pip install pytest ruff flake8 pyspark
 
-      - name: Run Ruff
+      - name: Run Ruff (fix)
+        run: |
+          ruff check . --fix
+
+      - name: Run Ruff (check)
         run: |
           ruff check .
 

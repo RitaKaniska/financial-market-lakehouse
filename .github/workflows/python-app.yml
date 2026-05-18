@@ -42,10 +42,9 @@ jobs:
           fi
           pip install -e .
 
-      - name: Lint with Ruff
-        run: |
-          # Dừng build nếu có lỗi syntax hoặc các lỗi nghiêm trọng
-          ruff check . --output-format=github
+      - name: Run Ruff (check)
+              # Chạy check trước, nếu sai thì fail luôn để dev sửa ở local
+              run: ruff check .
 
       - name: Run Tests
         env:

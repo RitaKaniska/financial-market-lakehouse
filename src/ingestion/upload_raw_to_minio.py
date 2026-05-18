@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import logging
-import os
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Iterable
@@ -53,6 +52,7 @@ class UploadResult:
 
 
 def load_config() -> IngestionConfig:
+    import os
     source_dir = Path(os.getenv("RAW_SOURCE_DIR", "data"))
     endpoint = os.getenv("MINIO_ENDPOINT", "http://localhost:9000")
     secure = endpoint.startswith("https://")

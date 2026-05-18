@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import os
-import sys
 from datetime import date, timedelta
 from pathlib import Path
 
@@ -36,7 +35,7 @@ def get_duckdb_connection() -> duckdb.DuckDBPyConnection:
     connection.execute(
         f"SET s3_endpoint='{os.getenv('MINIO_ENDPOINT', 'localhost:9000').replace('http://', '').replace('https://', '')}';"
     )
-    connection.execute(f"SET s3_access_key_id='{os.getenv('MINIO_ROOT_USER', 'minio_admin')}';")
+    connection.execute(f"SET s3_access_key_id='{os.getenv('MINIO_ROOT_USER', 'minio_admin')}';") 
     connection.execute(
         f"SET s3_secret_access_key='{os.getenv('MINIO_ROOT_PASSWORD', 'minio_password_secure')}';"
     )

@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import logging
-import os
 from pathlib import Path
 
 from pyspark.sql import DataFrame
@@ -23,6 +22,7 @@ def configure_logging() -> None:
 
 
 def get_min_fact_row_threshold() -> int:
+    import os
     return int(os.getenv("MIN_CURATED_FACT_ROWS", "100"))
 
 

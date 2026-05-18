@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import logging
-import os
 from pathlib import Path
 
 from pyspark.sql import DataFrame
@@ -197,6 +196,7 @@ def run_job(
     raw_path: str | None = None,
     staging_root: str | None = None,
 ) -> None:
+    import os
     configure_logging()
     load_env_file(Path(".env"))
     resolved_raw_path = raw_path or os.getenv("RAW_MARKET_PATH", "s3a://raw-zone/market_data")

@@ -33,23 +33,25 @@ jobs:
       - name: Install dependencies
         run: |
           python -m pip install --upgrade pip
-
+          # Cài các thư viện cần thiết để chạy Spark và Test
+          pip install pytest ruff pyspark
+          
           if [ -f requirements.txt ]; then
             pip install -r requirements.txt
           fi
-
-          pip install pytest ruff flake8 pyspark
-          pip install -e .
-
-      - name: Run Ruff (fix)
-        run: |
-          ruff check . --fix
+          
+          # Đăng ký thư mục hiện tại thành package để tránh lỗi import
+          # Đảm bảo bạn có file setup.py hoặc pyproject.toml ở gốc
+          pip install -e . 
 
       - name: Run Ruff (check)
-        run: |
-          ruff check .
+        # Chạy check trước, nếu sai thì fail luôn để dev sửa ở local
+        run: ruff check .
 
       - name: Run Tests
+        env:
+          # Ép Python tìm module ở thư mục gốc bất kể cấu trúc package
+          PYTHONPATH: .
         run: |
           pytest
 

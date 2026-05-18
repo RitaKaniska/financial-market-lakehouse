@@ -9,7 +9,9 @@ from pyspark.sql import functions as F
 from pyspark.sql import Window
 from pyspark.sql.types import DoubleType, LongType, StringType, StructField, StructType
 
-from src.utils.spark_helper import get_spark_session, load_env_file
+from src.quality.staging import get_staging_root
+from src.utils.env import load_env_file
+from src.utils.spark_helper import configure_partition_overwrite, get_spark_session
 
 
 LOGGER = logging.getLogger("market_transform")
@@ -174,33 +176,35 @@ def read_raw_market_data(spark, raw_path: str) -> DataFrame:
     return spark.read.option("header", "true").schema(RAW_MARKET_SCHEMA).csv(raw_path)
 
 
-def write_curated_outputs(
+def write_staging_outputs(
+    spark,
     fact_trades_df: DataFrame,
     dim_symbol_df: DataFrame,
     dim_time_df: DataFrame,
-    curated_root: str,
+    staging_root: str,
 ) -> None:
+    configure_partition_overwrite(spark)
     (
         fact_trades_df.write.mode("overwrite")
         .partitionBy("date")
-        .parquet(f"{curated_root}/fact_trades")
+        .parquet(f"{staging_root}/fact_trades")
     )
-    dim_symbol_df.write.mode("overwrite").parquet(f"{curated_root}/dim_symbol")
-    dim_time_df.write.mode("overwrite").parquet(f"{curated_root}/dim_time")
+    dim_symbol_df.write.mode("overwrite").parquet(f"{staging_root}/dim_symbol")
+    dim_time_df.write.mode("overwrite").parquet(f"{staging_root}/dim_time")
 
 
 def run_job(
     raw_path: str | None = None,
-    curated_root: str | None = None,
+    staging_root: str | None = None,
 ) -> None:
     configure_logging()
     load_env_file(Path(".env"))
     resolved_raw_path = raw_path or os.getenv("RAW_MARKET_PATH", "s3a://raw-zone/market_data")
-    resolved_curated_root = curated_root or os.getenv("CURATED_ROOT_PATH", "s3a://curated-zone")
+    resolved_staging_root = staging_root or get_staging_root()
 
     LOGGER.info("Starting Spark transformation job")
     LOGGER.info("Resolved raw path: %s", resolved_raw_path)
-    LOGGER.info("Resolved curated root: %s", resolved_curated_root)
+    LOGGER.info("Resolved staging root: %s", resolved_staging_root)
 
     spark = get_spark_session("financial-market-curation")
 
@@ -229,13 +233,14 @@ def run_job(
         dim_time_count,
     )
 
-    write_curated_outputs(
+    write_staging_outputs(
+        spark,
         fact_trades_df,
         dim_symbol_df,
         dim_time_df,
-        resolved_curated_root,
+        resolved_staging_root,
     )
-    LOGGER.info("Curated outputs written successfully")
+    LOGGER.info("Staging outputs written successfully; awaiting data quality promotion")
     spark.stop()
 
 

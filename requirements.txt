@@ -4,3 +4,4 @@ pyspark
 pytest
 duckdb
 streamlit
+plotly

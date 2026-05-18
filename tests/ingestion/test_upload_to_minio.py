@@ -10,12 +10,13 @@ from src.ingestion.upload_raw_to_minio import (
     discover_csv_files,
     ensure_bucket_exists,
     extract_symbol_from_path,
-    load_env_file,
     load_config,
     prepare_ingestion_plan,
     process_ingestion_plan,
+    validate_csv_schema,
     validate_source_file,
 )
+from src.utils.env import load_env_file
 
 
 # =========================================================
@@ -48,6 +49,12 @@ class MockMinioClient:
                 "content_type": content_type,
             }
         )
+
+
+VALID_CSV_HEADER = (
+    "timestamp,open,high,low,close,volume,close_time,quote_asset_volume\n"
+    "2024-01-01 00:00:00,1,2,1,1.5,10,2024-01-01 00:00:59.999,15\n"
+)
 
 
 class FailingMinioClient(MockMinioClient):
@@ -200,7 +207,7 @@ def test_validate_source_file_accepts_valid_file(
 ):
     file_path = tmp_path / "sample.csv"
 
-    file_path.write_text("hello")
+    file_path.write_text(VALID_CSV_HEADER, encoding="utf-8")
 
     validate_source_file(file_path)
 
@@ -219,6 +226,47 @@ def test_validate_source_file_raises_for_empty_file(
 def test_validate_source_file_raises_for_missing_file():
     with pytest.raises(FileNotFoundError):
         validate_source_file(Path("missing.csv"))
+
+
+def test_validate_csv_schema_accepts_valid_header(tmp_path):
+    csv_file = tmp_path / "BTCUSDT.csv"
+    csv_file.write_text(
+        "timestamp,open,high,low,close,volume,close_time,quote_asset_volume\n",
+        encoding="utf-8",
+    )
+    validate_csv_schema(csv_file)
+
+
+def test_validate_csv_schema_raises_for_missing_columns(tmp_path):
+    csv_file = tmp_path / "BTCUSDT.csv"
+    csv_file.write_text("timestamp,open,close\n", encoding="utf-8")
+
+    with pytest.raises(ValueError, match="missing columns"):
+        validate_csv_schema(csv_file)
+
+
+def test_validate_csv_schema_raises_when_no_header_row(tmp_path):
+    csv_file = tmp_path / "BTCUSDT.csv"
+    csv_file.write_text("", encoding="utf-8")
+
+    with pytest.raises(ValueError, match="no header row found"):
+        validate_csv_schema(csv_file)
+
+
+def test_validate_csv_schema_raises_for_whitespace_only_file(tmp_path):
+    csv_file = tmp_path / "BTCUSDT.csv"
+    csv_file.write_text("   \n\n  \t\n", encoding="utf-8")
+
+    with pytest.raises(ValueError, match="no header row found"):
+        validate_csv_schema(csv_file)
+
+
+def test_validate_source_file_raises_for_whitespace_only_file(tmp_path):
+    file_path = tmp_path / "blank.csv"
+    file_path.write_text("\n\n   \n", encoding="utf-8")
+
+    with pytest.raises(ValueError, match="no header row found"):
+        validate_source_file(file_path)
 
 
 # =========================================================
@@ -252,7 +300,7 @@ def test_process_ingestion_plan_uploads_files_successfully(
 ):
     file_path = tmp_path / "sample.csv"
 
-    file_path.write_text("data")
+    file_path.write_text(VALID_CSV_HEADER, encoding="utf-8")
 
     item = DiscoveredFile(
         source_path=file_path,
@@ -291,7 +339,7 @@ def test_process_ingestion_plan_handles_failed_uploads(
 ):
     file_path = tmp_path / "sample.csv"
 
-    file_path.write_text("data")
+    file_path.write_text(VALID_CSV_HEADER, encoding="utf-8")
 
     item = DiscoveredFile(
         source_path=file_path,

@@ -7,10 +7,22 @@ from pathlib import Path
 from typing import Iterable
 
 from minio import Minio
-from minio.error import S3Error
+
+from src.utils.env import load_env_file
 
 
 LOGGER = logging.getLogger("raw_ingestion")
+
+REQUIRED_CSV_COLUMNS = {
+    "timestamp",
+    "open",
+    "high",
+    "low",
+    "close",
+    "volume",
+    "close_time",
+    "quote_asset_volume",
+}
 
 
 @dataclass(frozen=True)
@@ -38,19 +50,6 @@ class UploadResult:
     object_key: str
     status: str
     message: str = ""
-
-
-def load_env_file(env_path: Path = Path(".env")) -> None:
-    if not env_path.exists():
-        return
-
-    for raw_line in env_path.read_text(encoding="utf-8").splitlines():
-        line = raw_line.strip()
-        if not line or line.startswith("#") or "=" not in line:
-            continue
-
-        key, value = line.split("=", 1)
-        os.environ.setdefault(key.strip(), value.strip())
 
 
 def load_config() -> IngestionConfig:
@@ -123,12 +122,38 @@ def prepare_ingestion_plan(
     return plan
 
 
+def _read_csv_header_line(file_path: Path) -> str:
+    lines = file_path.read_text(encoding="utf-8").splitlines()
+    if not lines:
+        raise ValueError(f"CSV schema validation failed for {file_path}; no header row found")
+
+    for line in lines:
+        header_line = line.strip()
+        if header_line:
+            return header_line
+
+    raise ValueError(f"CSV schema validation failed for {file_path}; no header row found")
+
+
+def validate_csv_schema(file_path: Path) -> None:
+    header_line = _read_csv_header_line(file_path)
+    columns = {column.strip() for column in header_line.split(",") if column.strip()}
+    missing_columns = REQUIRED_CSV_COLUMNS - columns
+    if missing_columns:
+        raise ValueError(
+            f"CSV schema validation failed for {file_path}; missing columns: "
+            f"{sorted(missing_columns)}"
+        )
+
+
 def validate_source_file(file_path: Path) -> None:
     if not file_path.exists():
         raise FileNotFoundError(f"Source file does not exist: {file_path}")
 
     if file_path.stat().st_size == 0:
         raise ValueError(f"Source file is empty: {file_path}")
+
+    validate_csv_schema(file_path)
 
 
 def get_minio_client(config: IngestionConfig) -> Minio:

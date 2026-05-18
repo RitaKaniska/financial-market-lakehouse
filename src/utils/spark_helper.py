@@ -1,22 +1,10 @@
 from __future__ import annotations
 
 import os
-from pathlib import Path
 
 from pyspark.sql import SparkSession
 
-
-def load_env_file(env_path: Path = Path(".env")) -> None:
-    if not env_path.exists():
-        return
-
-    for raw_line in env_path.read_text(encoding="utf-8").splitlines():
-        line = raw_line.strip()
-        if not line or line.startswith("#") or "=" not in line:
-            continue
-
-        key, value = line.split("=", 1)
-        os.environ.setdefault(key.strip(), value.strip())
+from src.utils.env import load_env_file
 
 
 def get_spark_session(app_name: str = "DataTransformation") -> SparkSession:
@@ -40,3 +28,7 @@ def get_spark_session(app_name: str = "DataTransformation") -> SparkSession:
         .config("spark.hadoop.fs.s3a.connection.ssl.enabled", "false")
         .getOrCreate()
     )
+
+
+def configure_partition_overwrite(spark: SparkSession) -> None:
+    spark.conf.set("spark.sql.sources.partitionOverwriteMode", "dynamic")

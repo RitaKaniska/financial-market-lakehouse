@@ -1,5 +1,32 @@
 # financial-market-lakehouse
-An engineering-grade, idempotent financial data lakehouse pipeline built with PySpark, Airflow, and MinIO for high-throughput market data analytics
+
+An engineering-grade, idempotent financial data lakehouse pipeline built with PySpark, Airflow, and MinIO for high-throughput market data analytics.
+
+## Quick Start (5 Steps)
+
+1. Copy environment template and place market CSV files under `data/`:
+   ```bash
+   cp .env.example .env
+   ```
+2. Start the local platform:
+   ```bash
+   docker compose up -d
+   ```
+3. Open Airflow at [http://localhost:8080](http://localhost:8080) and trigger the `market_data_pipeline` DAG.
+4. Wait until all three tasks succeed: `ingest_raw_data` → `transform_market_data` → `run_data_quality_checks`.
+5. Open the serving layer at [http://localhost:8501](http://localhost:8501) (Streamlit reads curated Parquet via DuckDB and renders price, volume, and VWAP analytics).
+
+## Local UIs
+
+| Service | URL |
+|---------|-----|
+| Airflow | http://localhost:8080 |
+| Spark Master | http://localhost:8081 |
+| MinIO API | http://localhost:9000 |
+| MinIO Console | http://localhost:9001 |
+| Streamlit Dashboard | http://localhost:8501 |
+
+Default Airflow credentials are defined in `.env` (`_AIRFLOW_WWW_USER_USERNAME` / `_AIRFLOW_WWW_USER_PASSWORD`).
 
 ## Data Source
 
@@ -16,60 +43,77 @@ Note:
 - The data is used for educational and take-home assignment purposes only.
 - Please refer to the original Kaggle dataset page for licensing, updates, and full metadata.
 
-## Current Pipeline Scope
+## Pipeline Flow
 
-The current implementation covers these layers:
+`Local CSV -> Airflow ingest -> MinIO raw-zone -> Spark transform (staging) -> Data quality -> MinIO curated-zone -> DuckDB/Streamlit`
 
-- local infrastructure with Airflow, Spark, MinIO, and Postgres
-- raw ingestion from local CSV files into MinIO `raw-zone`
-- Spark transformation logic for cleansing and window-based market metrics
-- curated analytical outputs written back to MinIO as partitioned Parquet datasets
+Transform jobs write to a **staging** prefix first. Data quality checks run against staging; only successful runs are promoted into the curated zone. Failed checks leave curated data unchanged.
+
+## Environment Variables
+
+See [`.env.example`](.env.example) for the full list. Important values:
+
+- `MINIO_ENDPOINT` — use `http://localhost:9000` on the host, `http://minio:9000` inside Docker services
+- `MIN_CURATED_FACT_ROWS` — minimum fact row count required before promotion (lower for tiny dev samples)
+- `CURATED_FACT_TRADES_PATH` — DuckDB S3 path pattern for the dashboard
+
+## Python Dependencies
+
+```bash
+pip install -r requirements.txt
+pytest
+```
+
+Run Streamlit on the host (without the Streamlit container):
+
+```bash
+streamlit run dashboard/app.py
+```
 
 ## Data Lake Layout
 
 ### Raw Zone
 
-The raw zone keeps the source-aligned files uploaded from the local `data/` directory.
-
-Current raw object key convention:
-
 - `raw-zone/market_data/symbol=<SYMBOL>/<FILE>.csv`
 
-Example:
+Example: `raw-zone/market_data/symbol=BTCUSDT/BTCUSDT.csv`
 
-- `raw-zone/market_data/symbol=BTCUSDT/BTCUSDT.csv`
+### Staging Zone
+
+- `curated-zone/staging/fact_trades/date=YYYY-MM-DD/...`
+- `curated-zone/staging/dim_symbol/...`
+- `curated-zone/staging/dim_time/...`
 
 ### Curated Zone
-
-The curated zone is not part of the original Kaggle source. It is the output area created by the Spark transformation job after raw data has been cleaned and modeled.
-
-Current curated datasets:
 
 - `curated-zone/fact_trades/date=YYYY-MM-DD/...`
 - `curated-zone/dim_symbol/...`
 - `curated-zone/dim_time/...`
 
-This means:
-
-- the source dataset only gives you raw CSV files
-- the pipeline creates the curated zone as a downstream analytics-ready layer
-
 ## Transformation Outputs
 
-The current Spark transformation logic is designed to:
+The Spark transformation layer:
 
-- parse timestamps and cast numeric columns
-- filter duplicate or invalid market rows
-- compute `vwap`
-- compute `moving_avg_5`
-- write a fact table and lightweight dimension tables to the curated zone
+- parses timestamps and casts numeric columns
+- filters duplicate or invalid market rows
+- computes `vwap` and `moving_avg_5`
+- writes star-schema outputs to staging with `partitionBy("date")` and dynamic partition overwrite
 
-## Airflow Orchestration Preview
+## Airflow Orchestration
 
-The pipeline has been registered in Airflow and can be triggered manually from the Airflow UI during development.
+The DAG chains: `ingest_raw_data` → `transform_market_data` → `run_data_quality_checks` (retry: 3 attempts, 5 minutes apart).
 
 ![Airflow DAG UI](./First_DAG_onUI.png)
 
-Example successful task execution from the Airflow UI:
-
 ![Airflow Task Success](./First_Task_Success.png)
+
+## Data Quality Checks
+
+At least six checks run on staging data before promotion:
+
+- minimum row count threshold (`MIN_CURATED_FACT_ROWS`)
+- non-null `symbol`
+- positive `close_price`
+- non-null `event_timestamp`
+- unique `(symbol, event_timestamp)` pairs
+- referential integrity between `fact_trades` and `dim_symbol`

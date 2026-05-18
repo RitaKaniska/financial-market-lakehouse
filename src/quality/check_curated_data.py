@@ -7,7 +7,9 @@ from pathlib import Path
 from pyspark.sql import DataFrame
 from pyspark.sql import functions as F
 
-from src.utils.spark_helper import get_spark_session, load_env_file
+from src.quality.staging import get_staging_root, promote_staging_to_curated, read_staging_datasets
+from src.utils.env import load_env_file
+from src.utils.spark_helper import get_spark_session
 
 
 LOGGER = logging.getLogger("curated_data_quality")
@@ -20,17 +22,17 @@ def configure_logging() -> None:
     )
 
 
-def read_curated_data(spark, curated_root: str = "s3a://curated-zone") -> tuple[DataFrame, DataFrame]:
-    fact_trades_df = spark.read.parquet(f"{curated_root}/fact_trades")
-    dim_symbol_df = spark.read.parquet(f"{curated_root}/dim_symbol")
-    return fact_trades_df, dim_symbol_df
+def get_min_fact_row_threshold() -> int:
+    return int(os.getenv("MIN_CURATED_FACT_ROWS", "100"))
 
 
-def check_fact_trades_has_rows(fact_trades_df: DataFrame) -> None:
+def check_fact_trades_has_rows(fact_trades_df: DataFrame, min_rows: int) -> None:
     row_count = fact_trades_df.count()
-    if row_count <= 0:
-        raise ValueError("fact_trades is empty")
-    LOGGER.info("DQ passed | fact_trades row count = %s", row_count)
+    if row_count < min_rows:
+        raise ValueError(
+            f"fact_trades row count {row_count} is below minimum threshold {min_rows}"
+        )
+    LOGGER.info("DQ passed | fact_trades row count = %s (min=%s)", row_count, min_rows)
 
 
 def check_symbol_not_null(fact_trades_df: DataFrame) -> None:
@@ -81,8 +83,9 @@ def check_unique_symbol_timestamp_pairs(fact_trades_df: DataFrame) -> None:
 
 
 def run_checks(fact_trades_df: DataFrame, dim_symbol_df: DataFrame) -> None:
+    min_rows = get_min_fact_row_threshold()
     checks = [
-        lambda: check_fact_trades_has_rows(fact_trades_df),
+        lambda: check_fact_trades_has_rows(fact_trades_df, min_rows),
         lambda: check_symbol_not_null(fact_trades_df),
         lambda: check_close_price_positive(fact_trades_df),
         lambda: check_event_timestamp_not_null(fact_trades_df),
@@ -103,24 +106,25 @@ def run_checks(fact_trades_df: DataFrame, dim_symbol_df: DataFrame) -> None:
     )
 
 
-def run(curated_root: str | None = None) -> int:
+def run(staging_root: str | None = None) -> int:
     configure_logging()
     load_env_file(Path(".env"))
-    resolved_curated_root = curated_root or os.getenv("CURATED_ROOT_PATH", "s3a://curated-zone")
-    LOGGER.info("Starting curated data quality checks")
-    LOGGER.info("Resolved curated root: %s", resolved_curated_root)
+    resolved_staging_root = get_staging_root(staging_root)
+    LOGGER.info("Starting curated data quality checks against staging zone")
+    LOGGER.info("Resolved staging root: %s", resolved_staging_root)
     spark = get_spark_session("financial-market-dq")
 
     try:
-        fact_trades_df, dim_symbol_df = read_curated_data(
-            spark,
-            curated_root=resolved_curated_root,
-        )
+        fact_trades_df, dim_symbol_df, _ = read_staging_datasets(spark, resolved_staging_root)
         run_checks(fact_trades_df, dim_symbol_df)
-        LOGGER.info("Curated data quality checks completed successfully")
+        promote_staging_to_curated(spark)
+        LOGGER.info("Curated data quality checks completed successfully; curated zone updated")
         return 0
     except Exception as exc:
-        LOGGER.exception("Curated data quality checks failed: %s", exc)
+        LOGGER.exception(
+            "Curated data quality checks failed; curated zone was not updated: %s",
+            exc,
+        )
         return 1
     finally:
         spark.stop()

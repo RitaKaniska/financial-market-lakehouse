@@ -245,6 +245,30 @@ def test_validate_csv_schema_raises_for_missing_columns(tmp_path):
         validate_csv_schema(csv_file)
 
 
+def test_validate_csv_schema_raises_when_no_header_row(tmp_path):
+    csv_file = tmp_path / "BTCUSDT.csv"
+    csv_file.write_text("", encoding="utf-8")
+
+    with pytest.raises(ValueError, match="no header row found"):
+        validate_csv_schema(csv_file)
+
+
+def test_validate_csv_schema_raises_for_whitespace_only_file(tmp_path):
+    csv_file = tmp_path / "BTCUSDT.csv"
+    csv_file.write_text("   \n\n  \t\n", encoding="utf-8")
+
+    with pytest.raises(ValueError, match="no header row found"):
+        validate_csv_schema(csv_file)
+
+
+def test_validate_source_file_raises_for_whitespace_only_file(tmp_path):
+    file_path = tmp_path / "blank.csv"
+    file_path.write_text("\n\n   \n", encoding="utf-8")
+
+    with pytest.raises(ValueError, match="no header row found"):
+        validate_source_file(file_path)
+
+
 # =========================================================
 # ensure_bucket_exists
 # =========================================================

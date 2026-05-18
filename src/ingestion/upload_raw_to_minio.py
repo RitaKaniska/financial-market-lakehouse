@@ -122,9 +122,22 @@ def prepare_ingestion_plan(
     return plan
 
 
+def _read_csv_header_line(file_path: Path) -> str:
+    lines = file_path.read_text(encoding="utf-8").splitlines()
+    if not lines:
+        raise ValueError(f"CSV schema validation failed for {file_path}; no header row found")
+
+    for line in lines:
+        header_line = line.strip()
+        if header_line:
+            return header_line
+
+    raise ValueError(f"CSV schema validation failed for {file_path}; no header row found")
+
+
 def validate_csv_schema(file_path: Path) -> None:
-    header_line = file_path.read_text(encoding="utf-8").splitlines()[0]
-    columns = {column.strip() for column in header_line.split(",")}
+    header_line = _read_csv_header_line(file_path)
+    columns = {column.strip() for column in header_line.split(",") if column.strip()}
     missing_columns = REQUIRED_CSV_COLUMNS - columns
     if missing_columns:
         raise ValueError(

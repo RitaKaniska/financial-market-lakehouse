@@ -14,7 +14,7 @@ An engineering-grade, idempotent financial data lakehouse pipeline built with Py
    ```
 3. Open Airflow at [http://localhost:8080](http://localhost:8080) and trigger the `market_data_pipeline` DAG.
 4. Wait until all three tasks succeed: `ingest_raw_data` → `transform_market_data` → `run_data_quality_checks`.
-5. Open the serving layer at [http://localhost:8501](http://localhost:8501) (Streamlit reads curated Parquet via DuckDB).
+5. Open the serving layer at [http://localhost:8501](http://localhost:8501) (Streamlit reads curated Parquet via DuckDB and renders price, volume, and VWAP analytics).
 
 ## Local UIs
 

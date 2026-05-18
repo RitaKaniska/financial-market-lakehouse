@@ -34,16 +34,12 @@ jobs:
       - name: Install dependencies
         run: |
           python -m pip install --upgrade pip
-          # Cài các core tools trước
-          pip install pytest ruff pyspark
-          
-          # Cài các dependencies từ dự án
           if [ -f requirements.txt ]; then
-            pip install -r requirements.txt
+            # Cài đặt mọi thứ cùng lúc
+            pip install -r requirements.txt pytest ruff pyspark
+          else
+            pip install pytest ruff pyspark
           fi
-          
-          # QUAN TRỌNG: Cài đặt dự án dưới dạng editable để Python luôn tìm thấy 'src' và 'dashboard'
-          # Lệnh này yêu cầu phải có file setup.py hoặc pyproject.toml ở thư mục gốc
           pip install -e .
 
       - name: Lint with Ruff

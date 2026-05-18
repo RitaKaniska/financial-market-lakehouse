@@ -54,8 +54,14 @@ CURATED_COLUMNS = [
 def cast_market_df(df):
     return (
         df.withColumn("date", F.col("date").cast("date"))
-        .withColumn("event_timestamp", F.col("event_timestamp").cast("timestamp"))
-        .withColumn("close_timestamp", F.col("close_timestamp").cast("timestamp"))
+        .withColumn(
+            "event_timestamp",
+            F.col("event_timestamp").cast("timestamp"),
+        )
+        .withColumn(
+            "close_timestamp",
+            F.col("close_timestamp").cast("timestamp"),
+        )
     )
 
 

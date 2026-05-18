@@ -48,10 +48,6 @@ jobs:
         run: |
           ruff check .
 
-      - name: Run Flake8
-        run: |
-          flake8 .
-
       - name: Run Tests
         run: |
           pytest

@@ -1,6 +1,8 @@
 from __future__ import annotations
 
+import os
 import logging
+import sys
 from pathlib import Path
 
 from pyspark.sql import DataFrame
@@ -195,10 +197,11 @@ def write_staging_outputs(
 def run_job(
     raw_path: str | None = None,
     staging_root: str | None = None,
+    env_path: Path | None = None,
 ) -> None:
-    import os
     configure_logging()
-    load_env_file(Path(".env"))
+    load_env_file(env_path)
+
     resolved_raw_path = raw_path or os.getenv("RAW_MARKET_PATH", "s3a://raw-zone/market_data")
     resolved_staging_root = staging_root or get_staging_root()
 
@@ -209,8 +212,12 @@ def run_job(
     spark = get_spark_session("financial-market-curation")
 
     raw_df = read_raw_market_data(spark, resolved_raw_path)
-    if "symbol" not in raw_df.columns:
-        raw_df = raw_df.withColumn("symbol", F.lit(None).cast(StringType()))
+
+    # Trích xuất symbol từ đường dẫn file (ví dụ: .../symbol=BTCUSDT/file.csv)
+    raw_df = raw_df.withColumn(
+        "symbol", 
+        F.regexp_extract(F.input_file_name(), r"symbol=([^/\\\\]+)", 1)
+    )
 
     raw_count = raw_df.count()
     LOGGER.info("Loaded raw rows: %s", raw_count)
@@ -244,5 +251,15 @@ def run_job(
     spark.stop()
 
 
+def run() -> int:
+    env_arg = Path(sys.argv[1]) if len(sys.argv) > 1 else None
+    try:
+        run_job(env_path=env_arg)
+        return 0
+    except Exception as exc:
+        LOGGER.exception("Spark transformation job failed: %s", exc)
+        return 1
+
+
 if __name__ == "__main__":
-    run_job()
+    sys.exit(run())

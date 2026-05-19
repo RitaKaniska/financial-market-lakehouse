@@ -1,9 +1,11 @@
 from __future__ import annotations
 
+import os
 import logging
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Iterable
+import sys
 
 from minio import Minio
 
@@ -52,7 +54,6 @@ class UploadResult:
 
 
 def load_config() -> IngestionConfig:
-    import os
     source_dir = Path(os.getenv("RAW_SOURCE_DIR", "data"))
     endpoint = os.getenv("MINIO_ENDPOINT", "http://localhost:9000")
     secure = endpoint.startswith("https://")
@@ -84,10 +85,14 @@ def extract_symbol_from_path(file_path: Path) -> str:
     parent_symbol = file_path.parent.name.strip().upper()
     file_symbol = file_path.stem.strip().upper()
 
-    if not parent_symbol and not file_symbol:
-        raise ValueError(f"Unable to infer symbol from path: {file_path}")
+    # Danh sách các thư mục cha không phải là symbol (generic)
+    GENERIC_DIRS = {"DATA", "RAW", "MARKET_DATA", "INPUT"}
 
-    if parent_symbol and file_symbol and parent_symbol != file_symbol:
+    # Nếu thư mục cha là generic hoặc trùng tên file, ưu tiên file_symbol
+    if parent_symbol in GENERIC_DIRS or not parent_symbol or parent_symbol == file_symbol:
+        return file_symbol
+
+    if parent_symbol and file_symbol:
         LOGGER.warning(
             "Symbol mismatch detected; using parent directory symbol. "
             "parent_symbol=%s file_symbol=%s path=%s",
@@ -95,8 +100,7 @@ def extract_symbol_from_path(file_path: Path) -> str:
             file_symbol,
             file_path,
         )
-
-    return parent_symbol or file_symbol
+    return parent_symbol
 
 
 def build_raw_object_key(raw_prefix: str, symbol: str, filename: str) -> str:
@@ -123,15 +127,12 @@ def prepare_ingestion_plan(
 
 
 def _read_csv_header_line(file_path: Path) -> str:
-    lines = file_path.read_text(encoding="utf-8").splitlines()
-    if not lines:
-        raise ValueError(f"CSV schema validation failed for {file_path}; no header row found")
-
-    for line in lines:
-        header_line = line.strip()
-        if header_line:
-            return header_line
-
+    # Sử dụng generator để tránh nạp toàn bộ file vào RAM (OOM)
+    with open(file_path, "r", encoding="utf-8") as f:
+        for line in f:
+            header_line = line.strip()
+            if header_line:
+                return header_line
     raise ValueError(f"CSV schema validation failed for {file_path}; no header row found")
 
 
@@ -245,15 +246,16 @@ def log_summary(results: Iterable[UploadResult]) -> None:
         LOGGER.warning("Failed uploads detected during raw ingestion")
 
 
-def main() -> None:
+def main(env_path: Path | None = None) -> None:
     configure_logging()
-    load_env_file()
+    # Hỗ trợ truyền env_path linh hoạt cho cả local và CI
+    load_env_file(env_path)
+    
     config = load_config()
 
     LOGGER.info("Starting raw ingestion to MinIO")
     LOGGER.info("Source directory: %s", config.source_dir)
     LOGGER.info("Target bucket: %s", config.bucket_name)
-    LOGGER.info("MinIO endpoint: %s", config.minio_endpoint)
 
     source_files = discover_csv_files(config.source_dir)
     ingestion_plan = prepare_ingestion_plan(source_files, config.raw_prefix)
@@ -271,8 +273,10 @@ def main() -> None:
 
 
 def run() -> int:
+    # Lấy env path từ CLI nếu có
+    env_arg = Path(sys.argv[1]) if len(sys.argv) > 1 else None
     try:
-        main()
+        main(env_path=env_arg)
     except Exception as exc:
         LOGGER.exception("Raw ingestion failed: %s", exc)
         return 1

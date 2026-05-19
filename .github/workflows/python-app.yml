@@ -43,8 +43,8 @@ jobs:
           pip install -e .
 
       - name: Run Ruff (check)
-              # Chạy check trước, nếu sai thì fail luôn để dev sửa ở local
-              run: ruff check .
+        # Chạy check trước, nếu sai thì fail luôn để dev sửa ở local
+        run: ruff check .
 
       - name: Run Tests
         env:
